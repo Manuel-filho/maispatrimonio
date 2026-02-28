@@ -1,0 +1,50 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\CategoryController;
+use App\Http\Controllers\API\AccountController;
+use App\Http\Controllers\API\TransactionController;
+use App\Http\Controllers\API\CurrencyController;
+use App\Http\Controllers\API\AssetController;
+
+/*
+|--------------------------------------------------------------------------
+| Rotas da API
+|--------------------------------------------------------------------------
+|
+| Aqui é onde você pode registrar as rotas da API para sua aplicação. Essas
+| rotas são carregadas pelo RouteServiceProvider e todas elas serão
+| atribuídas ao grupo de middleware "api". Crie algo ótimo!
+|
+|--------------------------------------------------------------------------
+*/
+
+Route::group(['prefix' => 'v1'], function () {
+    Route::group(['prefix' => 'auth'], function () {
+        Route::post('login', [AuthController::class, 'login']);
+        Route::post('register', [AuthController::class, 'register']);
+        Route::post('check-email', [AuthController::class, 'checkEmail']);
+
+        Route::group(['middleware' => 'auth:api'], function() {
+            Route::post('logout', [AuthController::class, 'logout']);
+            Route::post('refresh', [AuthController::class, 'refresh']);
+            Route::get('me', [AuthController::class, 'me']);
+        });
+    });
+
+    // Rotas Protegidas (Recursos)
+    Route::group(['middleware' => 'auth:api'], function() {
+        Route::apiResource('categories', CategoryController::class);
+        Route::apiResource('accounts', AccountController::class);
+        Route::apiResource('transactions', TransactionController::class);
+        
+        // Moedas
+        Route::apiResource('currencies', CurrencyController::class);
+        Route::post('currencies/{currency}/set-preferred', [CurrencyController::class, 'setPreferred']);
+
+        // Ativos (Património Imobilizado)
+        Route::apiResource('assets', AssetController::class);
+    });
+});
