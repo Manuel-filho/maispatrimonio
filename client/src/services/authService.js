@@ -25,6 +25,26 @@ const authService = {
         const response = await api.get('/auth/me');
         return response.data;
     },
+
+    updateProfile: async (userData) => {
+        // Use FormData if userData contains a file (avatar)
+        const response = await api.post('/auth/profile', userData, {
+            headers: {
+                'Content-Type': userData instanceof FormData ? 'multipart/form-data' : 'application/json'
+            }
+        });
+        return response.data;
+    },
+
+    changePassword: async (passwordData) => {
+        const response = await api.post('/auth/change-password', passwordData);
+        return response.data;
+    },
+
+    deleteAccount: async () => {
+        const response = await api.delete('/auth/me');
+        return response.data;
+    },
 };
 
 export default authService;

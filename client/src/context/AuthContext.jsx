@@ -29,7 +29,21 @@ export const AuthProvider = ({ children }) => {
             setLoading(false);
         };
 
+        const handleUnauthorized = () => {
+            // Remove cookies and reset state immediately without hitting the backend
+            // Because if we call logout(), the backend will return another 401, causing an infinite loop
+            Cookies.remove('token');
+            Cookies.remove('user');
+            setUser(null);
+            setIsAuthenticated(false);
+        };
+
+        window.addEventListener('auth:unauthorized', handleUnauthorized);
         initializeAuth();
+
+        return () => {
+            window.removeEventListener('auth:unauthorized', handleUnauthorized);
+        };
     }, []);
 
     const checkEmail = async (email) => {
@@ -95,6 +109,11 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const updateUser = (userData) => {
+        setUser(userData);
+        Cookies.set('user', JSON.stringify(userData), { expires: 7 });
+    };
+
     return (
         <AuthContext.Provider value={{
             user,
@@ -104,6 +123,7 @@ export const AuthProvider = ({ children }) => {
             register,
             logout,
             setUser,
+            updateUser,
             checkEmail
         }}>
             {children}

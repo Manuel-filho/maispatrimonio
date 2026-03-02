@@ -1,54 +1,26 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEnvelope, faLock, faUser, faCalendarAlt, faVenusMars, faArrowRight, faTriangleExclamation, faCheckCircle, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
-import useAuth from '../../hooks/useAuth';
+import { faLock, faUser, faCalendarAlt, faVenusMars, faArrowRight, faTriangleExclamation, faCheckCircle, faEye, faEyeSlash, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { useRegister } from '../../hooks/useRegister';
 import EmailInput from '../../components/ui/EmailInput';
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 import '../../styles/design-system.css';
 
 const Register = () => {
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        password: '',
-        birthdate: '',
-        gender: 'Masculino',
-    });
-
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const { register } = useAuth();
-    const navigate = useNavigate();
-
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setSuccess('');
-        setIsSubmitting(true);
-
-        const result = await register(formData);
-
-        if (result.success) {
-            setSuccess('Conta criada com sucesso! Redirecionando para o login...');
-            setTimeout(() => navigate('/login'), 2000);
-        } else {
-            // Handle array of errors or string
-            if (typeof result.message === 'object') {
-                const firstError = Object.values(result.message)[0];
-                setError(firstError);
-            } else {
-                setError(result.message);
-            }
-        }
-        setIsSubmitting(false);
-    };
+    const {
+        formData,
+        error,
+        success,
+        showPassword,
+        setShowPassword,
+        isSubmitting,
+        handleChange,
+        setPhone,
+        setEmail,
+        handleSubmit
+    } = useRegister();
 
     return (
         <main style={{
@@ -135,10 +107,41 @@ const Register = () => {
                             <label className="form-label">Endereço de E-mail</label>
                             <EmailInput
                                 value={formData.email}
-                                onChange={handleChange}
+                                onChange={(e) => setEmail(e.target.value)}
                                 placeholder="exemplo@email.com"
                                 className="form-input"
                                 required
+                            />
+                        </div>
+
+                        {/* Phone */}
+                        <div>
+                            <label className="form-label">Número de Telefone</label>
+                            <PhoneInput
+                                country={'ao'}
+                                value={formData.phone || ''}
+                                onChange={(phone) => setPhone(phone)}
+                                inputStyle={{
+                                    width: '100%',
+                                    height: '54px',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border)',
+                                    backgroundColor: 'var(--surface)',
+                                    color: 'var(--text)',
+                                    fontSize: '1rem',
+                                }}
+                                buttonStyle={{
+                                    border: '1px solid var(--border)',
+                                    backgroundColor: 'var(--surface)',
+                                    borderRadius: '4px 0 0 4px',
+                                }}
+                                dropdownStyle={{
+                                    backgroundColor: 'var(--surface)',
+                                    color: 'var(--text)',
+                                }}
+                                containerStyle={{
+                                    width: '100%',
+                                }}
                             />
                         </div>
 
@@ -170,9 +173,8 @@ const Register = () => {
                                         className="form-input"
                                         style={{ appearance: 'none' }}
                                     >
-                                        <option value="Masculino">Masculino</option>
-                                        <option value="Feminino">Feminino</option>
-                                        <option value="Outro">Outro</option>
+                                        <option value="M">Masculino</option>
+                                        <option value="F">Feminino</option>
                                     </select>
                                 </div>
                             </div>
@@ -201,7 +203,10 @@ const Register = () => {
                                         top: '50%',
                                         transform: 'translateY(-50%)',
                                         color: 'var(--text-muted)',
-                                        padding: '0.25rem'
+                                        padding: '0.25rem',
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer'
                                     }}
                                 >
                                     <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
@@ -220,10 +225,17 @@ const Register = () => {
                                 marginTop: '1rem',
                                 gap: '0.75rem',
                                 opacity: isSubmitting ? 0.7 : 1,
-                                cursor: isSubmitting ? 'not-allowed' : 'pointer'
+                                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center'
                             }}
                         >
-                            CRIAR CONTA PROFISSIONAL <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '0.8rem' }} />
+                            {isSubmitting ? (
+                                <>A PROCESSAR... <FontAwesomeIcon icon={faSpinner} spin style={{ fontSize: '1rem' }} /></>
+                            ) : (
+                                <>CRIAR CONTA PROFISSIONAL <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '0.8rem' }} /></>
+                            )}
                         </button>
                     </form>
                 </div>
@@ -242,7 +254,7 @@ const Register = () => {
         }
         .form-label {
           display: block; 
-          fontSize: 0.75rem; 
+          font-size: 0.75rem; 
           font-weight: 700; 
           text-transform: uppercase;
           letter-spacing: 0.05em;

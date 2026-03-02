@@ -26,19 +26,28 @@ class TransactionService
     public function createTransaction(array $data)
     {
         return DB::transaction(function () use ($data) {
+            $account = Account::findOrFail($data['account_id']);
             $category = \App\Models\Category::findOrFail($data['category_id']);
+
+            // REGRA: Apenas contas de LIQUIDEZ podem ter receitas/despesas diretas.
+            // Ativos e Investimentos são património imobilizado e não devem ser "gastos" diretamente.
+            $liquidityTypes = ['conta_corrente', 'poupanca', 'corrente', 'cash'];
+            if (!in_array($account->type, $liquidityTypes)) {
+                throw new Exception("Não é possível registar receitas ou despesas diretamente em contas de '{$account->type}'. Ativos imobilizados não devem ser afetados por fluxos de caixa diretos.");
+            }
 
             // Validação de consistência entre tipo de transação e tipo de categoria
             if ($category->type !== $data['type']) {
                 $tipoEsperado = $data['type'] === 'revenue' ? 'Receita' : 'Despesa';
-                throw new \Exception("A categoria '{$category->name}' não é do tipo {$tipoEsperado}.");
+                throw new Exception("A categoria '{$category->name}' não é do tipo {$tipoEsperado}.");
             }
 
             $transaction = Transaction::create($data);
-            $this->updateAccountBalance($transaction->account, $transaction->amount, $transaction->type);
+            $this->updateAccountBalance($account, $transaction->amount, $transaction->type);
             
-            // Atualiza o património do utilizador após a transação
-            $this->netWorthService->syncNetWorth($transaction->account->user);
+            // Sincroniza histórico e património
+            $this->syncHistory($account->user);
+            $this->netWorthService->syncNetWorth($account->user);
 
             return $transaction;
         });
@@ -58,24 +67,33 @@ class TransactionService
             // Reverte o impacto da transação antiga no saldo
             $this->reverseAccountBalance($transaction);
 
-            // Atualiza os dados da transação
-            // Se houver nova categoria ou novo tipo, valida a consistência
+            // Se houver nova conta, nova categoria ou novo tipo, valida a consistência
+            $novaContaId = $data['account_id'] ?? $transaction->account_id;
             $novaCategoriaId = $data['category_id'] ?? $transaction->category_id;
             $novoTipo = $data['type'] ?? $transaction->type;
             
+            $account = Account::findOrFail($novaContaId);
             $category = \App\Models\Category::findOrFail($novaCategoriaId);
+
+            // REGRA: Apenas contas de LIQUIDEZ
+            $liquidityTypes = ['conta_corrente', 'poupanca', 'corrente', 'cash'];
+            if (!in_array($account->type, $liquidityTypes)) {
+                throw new Exception("Não é possível atualizar para uma conta de '{$account->type}'. Ativos imobilizados não devem ser afetados por fluxos de caixa diretos.");
+            }
+
             if ($category->type !== $novoTipo) {
                 $tipoEsperado = $novoTipo === 'revenue' ? 'Receita' : 'Despesa';
-                throw new \Exception("A categoria '{$category->name}' não é do tipo {$tipoEsperado}.");
+                throw new Exception("A categoria '{$category->name}' não é do tipo {$tipoEsperado}.");
             }
 
             $transaction->update($data);
 
-            // Aplica o novo impacto no saldo
-            $this->updateAccountBalance($transaction->account, $transaction->amount, $transaction->type);
+            // Re-valida saldo na nova conta (ou mesma conta com novo valor)
+            $this->updateAccountBalance($account, $transaction->amount, $transaction->type);
 
-            // Atualiza o património do utilizador após a atualização
-            $this->netWorthService->syncNetWorth($transaction->account->user);
+            // Sincroniza histórico e património
+            $this->syncHistory($account->user);
+            $this->netWorthService->syncNetWorth($account->user);
 
             return $transaction;
         });
@@ -95,11 +113,158 @@ class TransactionService
             $this->reverseAccountBalance($transaction);
             $deleted = $transaction->delete();
             
-            // Atualiza o património do utilizador após eliminar
+            // Sincroniza histórico e património
+            $this->syncHistory($user);
             $this->netWorthService->syncNetWorth($user);
 
             return $deleted;
         });
+    }
+    /**
+     * Realiza uma transferência entre contas e cria registos de transação.
+     *
+     * @param array $data
+     * @return array
+     * @throws Exception
+     */
+    public function transfer(array $data)
+    {
+        return DB::transaction(function () use ($data) {
+            $fromAccount = Account::findOrFail($data['from_account_id']);
+            $toAccount = Account::findOrFail($data['to_account_id']);
+            $amount = $data['amount'];
+            $date = $data['date'] ?? now();
+
+            if ($fromAccount->id === $toAccount->id) {
+                throw new Exception("A conta de origem e destino não podem ser a mesma.");
+            }
+
+            // REGRA: Transferências de/para Ativos? 
+            // O utilizador disse: "PATRIMONO(ATIVO) NÃO DEVEM AFETAR RECEITA... ATÉ PODE AFECTAR TRANSFERENCIAS PORQUE VC PODE VERNDER A COISA"
+            // Então permitimos transferências, mas a de saída do ativo deve ser tratada com cuidado.
+            // No entanto, a regra de SALDO NEGATIVO é absoluta para LIQUIDEZ.
+            if ($fromAccount->balance < $amount) {
+                throw new Exception("Saldo insuficiente na conta '{$fromAccount->name}' para realizar a transferência. Dados negativos não são permitidos.");
+            }
+
+            // Encontrar uma categoria de transferência ou criar uma genérica
+            $category = \App\Models\Category::where('user_id', $fromAccount->user_id)
+                ->where('name', 'Transferência')
+                ->first();
+
+            if (!$category) {
+                $category = \App\Models\Category::create([
+                    'user_id' => $fromAccount->user_id,
+                    'name' => 'Transferência',
+                    'icon' => 'exchange-alt',
+                    'color' => '#6366f1',
+                    'type' => 'expense' // Usamos despesa por padrão para a origem
+                ]);
+            }
+
+            // Criar Transação de Saída (Origem)
+            $outTransaction = Transaction::create([
+                'account_id' => $fromAccount->id,
+                'category_id' => $category->id,
+                'description' => "Transferência para {$toAccount->name}",
+                'amount' => $amount,
+                'type' => 'expense',
+                'date' => $date
+            ]);
+
+            // Criar Transação de Entrada (Destino)
+            $inTransaction = Transaction::create([
+                'account_id' => $toAccount->id,
+                'category_id' => $category->id,
+                'description' => "Transferência de {$fromAccount->name}",
+                'amount' => $amount,
+                'type' => 'revenue',
+                'date' => $date,
+                'parent_transaction_id' => $outTransaction->id
+            ]);
+
+            // Atualizar saldos
+            $fromAccount->balance -= $amount;
+            $fromAccount->save();
+
+            $toAccount->balance += $amount;
+            $toAccount->save();
+
+            $this->syncHistory($fromAccount->user);
+            $this->netWorthService->syncNetWorth($fromAccount->user);
+
+            return [
+                'out' => $outTransaction,
+                'in' => $inTransaction
+            ];
+        });
+    }
+
+    /**
+     * Anula uma transação se estiver dentro do prazo de 30 minutos.
+     *
+     * @param Transaction $transaction
+     * @return void
+     * @throws Exception
+     */
+    public function cancelTransaction(Transaction $transaction)
+    {
+        return DB::transaction(function () use ($transaction) {
+            if ($transaction->cancelled_at) {
+                throw new Exception("Esta transação já foi anulada.");
+            }
+
+            $minutesSinceCreation = now()->diffInMinutes($transaction->created_at);
+            if ($minutesSinceCreation > 30) {
+                throw new Exception("O prazo de 30 minutos para anular esta transação já expirou.");
+            }
+
+            // Se for parte de uma transferência (perna principal ou secundária)
+            $transactionsToCancel = collect([$transaction]);
+            
+            // Se for a perna principal (saída)
+            $children = Transaction::where('parent_transaction_id', $transaction->id)->get();
+            $transactionsToCancel = $transactionsToCancel->concat($children);
+
+            // Se for a perna secundária (entrada)
+            if ($transaction->parent_transaction_id) {
+                $parent = Transaction::find($transaction->parent_transaction_id);
+                if ($parent) {
+                    $transactionsToCancel->push($parent);
+                }
+            }
+
+            foreach ($transactionsToCancel as $t) {
+                if ($t->cancelled_at) continue;
+                
+                $this->reverseAccountBalance($t);
+                $t->update(['cancelled_at' => now()]);
+            }
+
+            $this->syncHistory($transaction->account->user);
+            $this->netWorthService->syncNetWorth($transaction->account->user);
+        });
+    }
+
+    /**
+     * Sincroniza o histórico financeiro diário do utilizador.
+     *
+     * @param \App\Models\User $user
+     * @return void
+     */
+    public function syncHistory($user)
+    {
+        \App\Models\FinancialHistory::updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'date' => now()->toDateString(),
+            ],
+            [
+                'liquidity' => $user->liquidity,
+                'assets_value' => $user->assets_value,
+                'net_worth' => $user->total_net_worth,
+            ]
+        );
     }
 
     /**

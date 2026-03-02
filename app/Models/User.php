@@ -32,6 +32,17 @@ class User extends Authenticatable implements JWTSubject
     ];
 
     /**
+     * Os atributos calculados que devem ser incluídos na serialização.
+     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'liquidity',
+        'assets_value',
+        'total_net_worth',
+    ];
+
+    /**
      * Obtém a liquidez total (soma das contas).
      */
     public function getLiquidityAttribute()
@@ -138,5 +149,13 @@ class User extends Authenticatable implements JWTSubject
     public function categories()
     {
         return $this->hasMany(Category::class);
+    }
+
+    /**
+     * Obtém as metas do utilizador.
+     */
+    public function goals()
+    {
+        return $this->hasMany(Goal::class);
     }
 }

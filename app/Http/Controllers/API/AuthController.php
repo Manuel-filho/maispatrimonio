@@ -22,6 +22,10 @@ class AuthController extends Controller
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
             'password' => 'required|string|min:6',
+        ], [
+            'required' => 'Este campo é obrigatório.',
+            'email' => 'O formato do e-mail é inválido.',
+            'min' => 'A palavra-passe deve ter pelo menos :min caracteres.'
         ]);
 
         if ($validator->fails()) {
@@ -30,7 +34,7 @@ class AuthController extends Controller
 
         // Tenta autenticar o usuário com as credenciais fornecidas
         if (!$token = auth('api')->attempt($validator->validated())) {
-            return response()->json(['error' => 'Não autorizado'], 401);
+            return response()->json(['error' => 'As credenciais fornecidas estão incorretas.'], 401);
         }
 
         // Retorna o token JWT recém-criado
@@ -51,10 +55,22 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:100|unique:users',
             'password' => 'required|string|min:6',
             'avatar' => 'nullable|file|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
-            'phone' => 'nullable|string',
-            'birthdate' => 'required|date',
-            'gender' => 'required|string',
+            'phone' => 'required|string',
+            'birthdate' => 'required|date|before_or_equal:-10 years',
+            'gender' => 'required|string|in:M,F',
             'net_worth' => 'nullable|numeric',
+        ], [
+            'required' => 'Este campo é obrigatório.',
+            'string' => 'Este campo deve ser um texto válido.',
+            'email' => 'O formato do e-mail é inválido.',
+            'email.unique' => 'Este e-mail já está associado a uma conta.',
+            'min' => 'Deve ter pelo menos :min caracteres.',
+            'max' => 'Não pode ter mais de :max caracteres.',
+            'between' => 'O nome deve ter entre :min e :max caracteres.',
+            'date' => 'A data inserida não é válida.',
+            'before_or_equal' => 'Lamentamos, mas deve ter pelo menos 10 anos de idade para se registar.',
+            'mimes' => 'O avatar deve ser uma imagem válida.',
+            'numeric' => 'O valor deve ser numérico.'
         ]);
 
         if ($validator->fails()) {
@@ -73,7 +89,9 @@ class AuthController extends Controller
 
             $user = User::create(array_merge(
                 $validatedData,
-                ['password' => bcrypt($request->password)]
+                [
+                    'password' => bcrypt($request->password),
+                ]
             ));
 
             // Cria a moeda Kwanza para o novo utilizador
@@ -106,6 +124,9 @@ class AuthController extends Controller
         // Valida o e-mail fornecido
         $validator = Validator::make($request->all(), [
             'email' => 'required|string|email|max:100',
+        ], [
+            'required' => 'Por favor, insira o seu endereço de e-mail.',
+            'email' => 'O formato do e-mail é inválido.'
         ]);
 
         if ($validator->fails()) {
@@ -126,7 +147,7 @@ class AuthController extends Controller
             ]);
         }
 
-        return response()->json('manteiga', 404);
+        return response()->json(['error' => 'Não encontrámos nenhuma conta com este e-mail.'], 404);
     }
 
 
@@ -159,7 +180,125 @@ class AuthController extends Controller
      */
     public function me()
     {
-        return response()->json(auth()->user());
+        return response()->json(auth()->user()->load('preferredCurrency'));
+    }
+
+    /**
+     * Atualiza o perfil do utilizador.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = auth()->user();
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|between:2,100',
+            'email' => 'required|string|email|max:100|unique:users,email,' . $user->id,
+            'phone' => 'nullable|string',
+            'birthdate' => 'nullable|date|before_or_equal:today',
+            'gender' => 'nullable|string|in:M,F',
+            'preferred_currency_id' => 'nullable|exists:currencies,id',
+            'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ], [
+            'required' => 'Este campo é obrigatório.',
+            'email' => 'O formato do e-mail é inválido.',
+            'email.unique' => 'Este e-mail já está associado a outra conta.',
+            'date' => 'A data inserida não é válida.',
+            'mimes' => 'O avatar deve ser uma imagem válida.',
+            'exists' => 'A moeda selecionada é inválida.'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        $data = $validator->validated();
+
+        if ($request->hasFile('avatar')) {
+            $path = $request->file('avatar')->store('avatars', 'public');
+            $data['avatar'] = url('storage/' . $path);
+        }
+
+        $user->update($data);
+
+        return response()->json([
+            'message' => 'Perfil atualizado com sucesso!',
+            'user' => $user->fresh()->load('preferredCurrency')
+        ]);
+    }
+
+    /**
+     * Altera a palavra-passe do utilizador.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function changePassword(Request $request)
+    {
+        $user = auth()->user();
+
+        $validator = Validator::make($request->all(), [
+            'current_password' => 'required|string',
+            'new_password' => 'required|string|min:6|confirmed',
+        ], [
+            'required' => 'Este campo é obrigatório.',
+            'min' => 'A nova palavra-passe deve ter pelo menos :min caracteres.',
+            'confirmed' => 'A confirmação da palavra-passe não coincide.'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json($validator->errors(), 422);
+        }
+
+        if (!\Illuminate\Support\Facades\Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'current_password' => ['A palavra-passe atual está incorreta.']
+            ], 422);
+        }
+
+        $user->update([
+            'password' => \Illuminate\Support\Facades\Hash::make($request->new_password)
+        ]);
+
+        return response()->json([
+            'message' => 'Palavra-passe alterada com sucesso!'
+        ]);
+    }
+
+    /**
+     * Elimina permanentemente a conta do utilizador autenticado.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function destroy()
+    {
+        $user = auth()->user();
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($user) {
+                // Elimina dados relacionados (contas, categorias, metas, ativos, etc.)
+                // Assumindo que as relações no modelo têm onDelete('cascade')
+                // Caso contrário, eliminamos manualmente aqui.
+                
+                $user->accounts()->each(function($account) {
+                    $account->transactions()->delete();
+                    $account->delete();
+                });
+                
+                $user->categories()->delete();
+                $user->goals()->delete();
+                $user->assets()->delete();
+                $user->currencies()->delete();
+                
+                $user->delete();
+            });
+
+            return response()->json(['message' => 'Conta eliminada com sucesso.']);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Erro ao eliminar conta: ' . $e->getMessage()], 500);
+        }
     }
 
     /**

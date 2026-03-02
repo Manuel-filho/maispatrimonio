@@ -14,9 +14,13 @@ class Goal extends Model
     protected $fillable = [
         'user_id',
         'name',
+        'description',
         'target_amount',
         'current_amount',
         'due_date',
+        'status',
+        'color',
+        'icon',
     ];
 
     /**

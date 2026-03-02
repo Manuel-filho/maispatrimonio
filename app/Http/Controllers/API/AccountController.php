@@ -33,13 +33,13 @@ class AccountController extends Controller
         $data = $request->all();
 
         // Se não for enviada moeda, usa a preferida do utilizador
-        if (!$request->has('currency_id')) {
+        if (!$request->has('currency_id') || empty($request->currency_id)) {
             $data['currency_id'] = Auth::user()->preferred_currency_id;
         } else {
             // Verifica se a moeda pertence ao utilizador
             $currency = \App\Models\Currency::find($request->currency_id);
-            if ($currency->user_id !== Auth::id()) {
-                return response()->json(['message' => 'Moeda não autorizada'], 403);
+            if (!$currency || $currency->user_id !== Auth::id()) {
+                return response()->json(['message' => 'Moeda não autorizada ou inexistente'], 403);
             }
         }
 

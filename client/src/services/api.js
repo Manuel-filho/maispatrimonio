@@ -30,7 +30,8 @@ api.interceptors.response.use(
         if (error.response && error.response.status === 401) {
             Cookies.remove('token');
             Cookies.remove('user');
-            // window.location.href = '/login'; // Optional: Redirect to login
+            // Despachar evento para o AuthContext "expulsar" o utilizador imediatamente
+            window.dispatchEvent(new CustomEvent('auth:unauthorized'));
         }
         return Promise.reject(error);
     }

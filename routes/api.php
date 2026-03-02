@@ -8,6 +8,7 @@ use App\Http\Controllers\API\AccountController;
 use App\Http\Controllers\API\TransactionController;
 use App\Http\Controllers\API\CurrencyController;
 use App\Http\Controllers\API\AssetController;
+use App\Http\Controllers\API\GoalController;
 
 /*
 |--------------------------------------------------------------------------
@@ -31,6 +32,9 @@ Route::group(['prefix' => 'v1'], function () {
             Route::post('logout', [AuthController::class, 'logout']);
             Route::post('refresh', [AuthController::class, 'refresh']);
             Route::get('me', [AuthController::class, 'me']);
+            Route::post('profile', [AuthController::class, 'updateProfile']);
+            Route::post('change-password', [AuthController::class, 'changePassword']);
+            Route::delete('me', [AuthController::class, 'destroy']);
         });
     });
 
@@ -38,7 +42,12 @@ Route::group(['prefix' => 'v1'], function () {
     Route::group(['middleware' => 'auth:api'], function() {
         Route::apiResource('categories', CategoryController::class);
         Route::apiResource('accounts', AccountController::class);
+        Route::post('transactions/transfer', [TransactionController::class, 'transfer']);
+        Route::post('transactions/{transaction}/cancel', [TransactionController::class, 'cancel']);
+        Route::get('transactions/history', [TransactionController::class, 'history']);
+        Route::get('transactions/stats', [TransactionController::class, 'stats']);
         Route::apiResource('transactions', TransactionController::class);
+        Route::apiResource('goals', GoalController::class);
         
         // Moedas
         Route::apiResource('currencies', CurrencyController::class);

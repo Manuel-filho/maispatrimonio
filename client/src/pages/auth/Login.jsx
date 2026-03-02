@@ -1,60 +1,27 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEnvelope, faLock, faArrowRight, faArrowLeft, faTriangleExclamation, faUserCircle, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
-import useAuth from '../../hooks/useAuth';
+import { faLock, faArrowRight, faArrowLeft, faTriangleExclamation, faUserCircle, faEye, faEyeSlash, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { useLogin } from '../../hooks/useLogin';
 import EmailInput from '../../components/ui/EmailInput';
 import '../../styles/design-system.css';
 
 const Login = () => {
-    const [step, setStep] = useState(1); // 1: Email, 2: Password
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [userData, setUserData] = useState(null);
-    const [error, setError] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const { login, checkEmail } = useAuth();
-    const navigate = useNavigate();
-
-    const handleEmailSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setIsSubmitting(true);
-
-        const result = await checkEmail(email);
-
-        if (result.success) {
-            setUserData(result.data.user);
-            setStep(2);
-        } else {
-            setError(result.message);
-        }
-        setIsSubmitting(false);
-    };
-
-    const handleLoginSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setIsSubmitting(true);
-
-        const result = await login(email, password);
-
-        if (result.success) {
-            navigate('/');
-        } else {
-            setError(result.message);
-        }
-        setIsSubmitting(false);
-    };
-
-    const resetStep = () => {
-        setStep(1);
-        setUserData(null);
-        setPassword('');
-        setError('');
-    };
+    const {
+        step,
+        email,
+        setEmail,
+        password,
+        setPassword,
+        showPassword,
+        setShowPassword,
+        userData,
+        error,
+        isSubmitting,
+        handleEmailSubmit,
+        handleLoginSubmit,
+        resetStep
+    } = useLogin();
 
     return (
         <main style={{
@@ -88,10 +55,13 @@ const Login = () => {
                                 left: '2rem',
                                 color: 'var(--text-muted)',
                                 fontSize: '0.9rem',
+                                background: 'none',
+                                border: 'none',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '0.5rem',
-                                zIndex: 10
+                                zIndex: 10,
+                                cursor: 'pointer'
                             }}
                         >
                             <FontAwesomeIcon icon={faArrowLeft} /> Voltar
@@ -125,7 +95,9 @@ const Login = () => {
                                         <FontAwesomeIcon icon={faUserCircle} style={{ fontSize: '80px', color: 'var(--border-strong)' }} />
                                     )}
                                 </div>
-                                <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.25rem' }}>Olá, {userData?.name?.split(' ')[0]}</h2>
+                                <h2 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.25rem' }}>
+                                    Olá, {userData?.name ? (userData.name.split(' ').length > 1 ? `${userData.name.split(' ')[0]} ${userData.name.split(' ').pop()}` : userData.name) : ''}
+                                </h2>
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{email}</p>
                             </>
                         )}
@@ -174,10 +146,18 @@ const Login = () => {
                                     fontSize: '1rem',
                                     marginTop: '0.5rem',
                                     gap: '0.75rem',
-                                    opacity: isSubmitting ? 0.7 : 1
+                                    opacity: isSubmitting ? 0.7 : 1,
+                                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center'
                                 }}
                             >
-                                PROXIMO PASSO <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '0.8rem' }} />
+                                {isSubmitting ? (
+                                    <>A PROCESSAR... <FontAwesomeIcon icon={faSpinner} spin style={{ fontSize: '1rem' }} /></>
+                                ) : (
+                                    <>PRÓXIMO PASSO <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '0.8rem' }} /></>
+                                )}
                             </button>
                         </form>
                     ) : (
@@ -204,7 +184,10 @@ const Login = () => {
                                             top: '50%',
                                             transform: 'translateY(-50%)',
                                             color: 'var(--text-muted)',
-                                            padding: '0.25rem'
+                                            padding: '0.25rem',
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer'
                                         }}
                                     >
                                         <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} />
@@ -228,10 +211,18 @@ const Login = () => {
                                     fontSize: '1rem',
                                     marginTop: '0.5rem',
                                     gap: '0.75rem',
-                                    opacity: isSubmitting ? 0.7 : 1
+                                    opacity: isSubmitting ? 0.7 : 1,
+                                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center'
                                 }}
                             >
-                                ENTRAR NO SISTEMA <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '0.8rem' }} />
+                                {isSubmitting ? (
+                                    <>A PROCESSAR... <FontAwesomeIcon icon={faSpinner} spin style={{ fontSize: '1rem' }} /></>
+                                ) : (
+                                    <>ENTRAR NO SISTEMA <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: '0.8rem' }} /></>
+                                )}
                             </button>
                         </form>
                     )}

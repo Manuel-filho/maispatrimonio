@@ -18,6 +18,19 @@ class Transaction extends Model
         'amount',
         'type',
         'date',
+        'cancelled_at',
+        'parent_transaction_id',
+    ];
+
+    /**
+     * Os atributos que devem ser convertidos (cast).
+     *
+     * @var array
+     */
+    protected $casts = [
+        'amount' => 'decimal:2',
+        'date' => 'date',
+        'cancelled_at' => 'datetime',
     ];
 
     /**
